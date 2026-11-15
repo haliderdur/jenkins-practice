@@ -1,0 +1,85 @@
+name: Playwright Tests
+
+on: # when the workflow should get executed?
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+  schedule:
+    - cron: '0 16 * * *'
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+
+jobs:
+  playwright-tests:
+    runs-on: ubuntu-latest # virtual machine (macos-latest, windows-latest, ubuntu-latest)
+    timeout-minutes: 60 # max timeout in minutes for rntire workflow to be completed
+
+    steps:
+      - name: Check whether tests should run
+        id: schedule-gate
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          should_run=true
+
+          if [[ "$EVENT_NAME" == "pull_request" && "$PR_MERGED" != "true" ]]; then
+            should_run=false
+          elif [[ "$EVENT_NAME" == "schedule" ]]; then
+            berlin_hour="$(TZ=Europe/Berlin date +%H)"
+            if [[ "$berlin_hour" != "18" ]]; then
+              should_run=false
+            fi
+          fi
+
+          echo "run-tests=$should_run" >> "$GITHUB_OUTPUT"
+
+      - name: Check out repository
+        if: steps.schedule-gate.outputs.run-tests == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        if: steps.schedule-gate.outputs.run-tests == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.schedule-gate.outputs.run-tests == 'true'
+        run: npm ci
+
+      - name: Install Playwright browsers
+        if: steps.schedule-gate.outputs.run-tests == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        if: steps.schedule-gate.outputs.run-tests == 'true'
+        run: npm run tests:headless
+        env:
+          PRACTICE_USERNAME: ${{ secrets.PRACTICE_USERNAME }}
+          PRACTICE_PASSWORD: ${{ secrets.PRACTICE_PASSWORD }}
+
+      - name: Upload Playwright HTML report
+        if: always() && steps.schedule-gate.outputs.run-tests == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Playwright test results
+        if: always() && steps.schedule-gate.outputs.run-tests == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 30
