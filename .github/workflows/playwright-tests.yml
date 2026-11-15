@@ -16,7 +16,7 @@ on: # when the workflow should get executed?
 
 jobs:
   playwright-tests:
-    runs-on: ubuntu-latest # virtual machine (macos-latest, windows-latest, ubuntu-latest)
+    runs-on: ubuntu-24.04 # virtual machine (macos-latest, windows-latest, ubuntu-latest)
     timeout-minutes: 60 # max timeout in minutes for rntire workflow to be completed
 
     steps:
